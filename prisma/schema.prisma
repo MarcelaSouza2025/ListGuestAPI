@@ -1,0 +1,107 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+//datasource db {
+//  provider = "postgresql"
+//  url      = env("DATABASE_URL")
+//}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")   // usar o POOLED (-pooler)
+  directUrl = env("DIRECT_URL")     // usar o DIRECT (sem -pooler)
+}
+
+
+enum Role {
+  user
+  admin
+}
+
+enum GuestStatus {
+  pending
+  present
+  absent
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(user)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relations
+  createdEvents Event[] @relation("EventsCreatedBy")
+  updatedEvents Event[] @relation("EventsUpdatedBy")
+
+  createdGuests Guest[] @relation("GuestsCreatedBy")
+  updatedGuests Guest[] @relation("GuestsUpdatedBy")
+
+  refreshTokens RefreshToken[]
+  resetTokens   PasswordResetToken[]
+}
+
+model Event {
+  id         String   @id @default(cuid())
+  title      String
+  artist     String
+  date       DateTime
+  location   String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  createdBy   User    @relation("EventsCreatedBy", fields: [createdById], references: [id])
+  createdById String
+
+  updatedBy   User?   @relation("EventsUpdatedBy", fields: [updatedById], references: [id])
+  updatedById String?
+
+  guests      Guest[]
+}
+
+model Guest {
+  id         String       @id @default(cuid())
+  event      Event        @relation(fields: [eventId], references: [id])
+  eventId    String
+  name       String
+  birthdate  DateTime
+  document   String
+  status     GuestStatus  @default(pending)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  createdBy   User        @relation("GuestsCreatedBy", fields: [createdById], references: [id])
+  createdById String
+
+  updatedBy   User?       @relation("GuestsUpdatedBy", fields: [updatedById], references: [id])
+  updatedById String?
+}
+
+model RefreshToken {
+  id         String   @id @default(cuid())
+  tokenHash  String   // armazenar hash do refresh token
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+  replacedBy String?  // opcional: token id que substituiu
+  ip         String?
+  userAgent  String?
+}
+
+model PasswordResetToken {
+  id         String   @id @default(cuid())
+  tokenHash  String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([tokenHash])
+}

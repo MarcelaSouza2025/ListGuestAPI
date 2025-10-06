@@ -1,0 +1,19 @@
+import express from 'express';
+import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import authRoutes from './routes/auth.routes.js';
+import eventRoutes from './routes/event.routes.js';
+import guestRoutes from './routes/guest.routes.js';
+
+const app = express();
+app.use(cors({ origin: true, credentials: true }));
+app.use(express.json());
+app.use(cookieParser());
+
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
+app.use('/api/auth', authRoutes);
+app.use('/api/events', eventRoutes);
+app.use('/api/events/:eventId/guests', (req, res, next) => next(), guestRoutes);
+
+export default app;

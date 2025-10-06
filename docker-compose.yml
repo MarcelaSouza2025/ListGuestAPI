@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: event_pg
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: event_guestlist
+    # pode omitir ports se não precisa acessar do host:
+    # ports:
+    #   - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build: .
+    container_name: event_api
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/event_guestlist?schema=public
+      PORT: 4000
+      JWT_ACCESS_SECRET: access_secret_here
+      JWT_ACCESS_EXPIRES: 15m
+      JWT_REFRESH_SECRET: refresh_secret_here
+      JWT_REFRESH_EXPIRES: 30d
+      ADMIN_SECRET: minha-chave-admin
+      APP_BASE_URL: http://localhost:4000
+    ports:
+      - "4000:4000"
+    command: >
+      sh -lc "npx prisma migrate deploy &&
+              npx prisma generate &&
+              node dist/server.js"
+    restart: unless-stopped
+
+volumes:
+  pgdata:
