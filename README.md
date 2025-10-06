@@ -108,7 +108,7 @@ Dica de segurança: use segredos do provedor para JWT_*, ADMIN_SECRET, SMTP_PASS
 
 
 
-#Importante
+# Importante
 
 docker compose build --no-cache api
 docker compose up -d
