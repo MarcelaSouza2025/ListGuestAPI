@@ -35,4 +35,11 @@ router.post('/reset-password/:token', [
   body('passwordConfirm').notEmpty()
 ], resetPassword);
 
+router.post('/reset-password-html', [
+  body('token').notEmpty(),
+  body('password').isLength({ min: 6 }),
+  body('passwordConfirm').notEmpty(),
+], resetPassword);
+
+
 export default router;

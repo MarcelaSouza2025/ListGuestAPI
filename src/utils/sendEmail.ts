@@ -1,13 +1,24 @@
-import { getTransporter } from '../config/mailer.js';
 import nodemailer from 'nodemailer';
 
-export async function sendEmail({ to, subject, html }: { to: string; subject: string; html: string; }) {
-  const transporter = await getTransporter();
-  const from = process.env.MAIL_FROM || 'No-Reply <no-reply@example.com>';
-  
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT),
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
-  const info = await transporter.sendMail({ from, to, subject, html });
-  const preview = nodemailer.getTestMessageUrl?.(info);
-  if (preview) console.log('📨 Email preview URL:', preview);
-  return info;
+export async function sendMail({
+  to,
+  subject,
+  html,
+}: {
+  to: string;
+  subject: string;
+  html: string;
+}) {
+  const from = process.env.MAIL_FROM || '"Eventos" <no-reply@eventos.com>';
+  await transporter.sendMail({ from, to, subject, html });
 }

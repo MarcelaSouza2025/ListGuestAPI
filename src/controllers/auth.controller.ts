@@ -132,21 +132,30 @@ export async function forgotPassword(req: Request, res: Response) {
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) return res.json({ message: 'If the email exists, a reset link was sent' });
 
+    // Gera token aleatório e armazena hash
     const raw = randomToken(32);
     const tokenHash = sha256(raw);
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
 
     await prisma.passwordResetToken.create({
-      data: { tokenHash, userId: user.id, expiresAt }
+      data: { tokenHash, userId: user.id, expiresAt },
     });
 
+    // Link aponta para o HTML público (não mais /api/)
     const base = process.env.APP_BASE_URL || 'http://localhost:4000';
-    const resetURL = `${base}/api/auth/reset-password/${raw}`;
+    const resetURL = `${base}/reset-password.html?token=${raw}`;
 
     await sendEmail({
       to: user.email,
-      subject: 'Password reset',
-      html: `<p>Click to reset your password:</p><p><a href="${resetURL}">${resetURL}</a></p><p>This link expires in 30 minutes.</p>`
+      subject: 'Redefinição de senha - GuestList',
+      html: `
+        <p>Olá ${user.name || ''},</p>
+        <p>Você solicitou a redefinição da sua senha.</p>
+        <p>Clique no link abaixo para redefinir:</p>
+        <p><a href="${resetURL}">${resetURL}</a></p>
+        <p>O link expira em 1 hora.</p>
+        <p>Se não foi você, ignore este e-mail.</p>
+      `,
     });
 
     return res.json({ message: 'Reset link sent if email is registered' });
@@ -157,23 +166,28 @@ export async function forgotPassword(req: Request, res: Response) {
 
 export async function resetPassword(req: Request, res: Response) {
   try {
-    const { token } = req.params;
+    const { token } = req.body; // agora vem no body (enviado via fetch no HTML)
     const { password, passwordConfirm } = req.body;
-    if (password !== passwordConfirm) return res.status(400).json({ message: 'Password confirmation does not match' });
+    if (password !== passwordConfirm)
+      return res.status(400).json({ message: 'Password confirmation does not match' });
 
     const tokenHash = sha256(token);
     const record = await prisma.passwordResetToken.findFirst({
       where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } },
-      include: { user: true }
+      include: { user: true },
     });
 
-    if (!record || !record.user) return res.status(400).json({ message: 'Invalid or expired token' });
+    if (!record || !record.user)
+      return res.status(400).json({ message: 'Invalid or expired token' });
 
     const newHash = await hashPassword(password);
     await prisma.$transaction([
       prisma.user.update({ where: { id: record.userId }, data: { password: newHash } }),
       prisma.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
-      prisma.refreshToken.updateMany({ where: { userId: record.userId, revokedAt: null }, data: { revokedAt: new Date() } })
+      prisma.refreshToken.updateMany({
+        where: { userId: record.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      }),
     ]);
 
     return res.json({ message: 'Password updated successfully' });
