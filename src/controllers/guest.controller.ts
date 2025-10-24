@@ -8,7 +8,7 @@ import type { GuestStatus } from '@prisma/client';
 const ALLOWED_STATUS = new Set<GuestStatus>(['pending', 'present', 'absent']);
 
 function parseBirthdateOr400(birthdate: unknown) {
-  if (birthdate === undefined) return undefined;
+  if (birthdate === undefined || birthdate === null || birthdate === '') return undefined;
   const d = new Date(String(birthdate));
   if (isNaN(d.getTime())) throw new Error('INVALID_BIRTHDATE');
   return d;
@@ -24,11 +24,15 @@ export async function createGuest(req: AuthedRequest, res: Response) {
 
     const { eventId } = req.params;
     const { name, birthdate, document, status } = req.body as {
-      name: string;
-      birthdate: string;
-      document: string;
+      name?: string;
+      birthdate?: string;
+      document?: string;
       status?: GuestStatus;
     };
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: 'Name is required' });
+    }
 
     const event = await prisma.event.findUnique({ where: { id: eventId } });
     if (!event) return res.status(404).json({ message: 'Event not found' });
@@ -44,16 +48,18 @@ export async function createGuest(req: AuthedRequest, res: Response) {
       return res.status(400).json({ message: 'Invalid birthdate' });
     }
 
+    const data: any = {
+      eventId,
+      name: name.trim(),
+      status: status ?? 'pending',
+      createdById: req.user!.id,
+      updatedById: req.user!.id
+    };
+    if (birth !== undefined) data.birthdate = birth;
+    if (document !== undefined) data.document = document;
+
     const guest = await prisma.guest.create({
-      data: {
-        eventId,
-        name,
-        birthdate: birth!,
-        document,
-        status: status ?? 'pending',
-        createdById: req.user!.id,
-        updatedById: req.user!.id
-      },
+      data,
       include: {
         event: { select: { id: true, title: true, date: true, location: true } },
         createdBy: { select: { id: true, name: true, email: true } },
@@ -103,7 +109,6 @@ export async function updateGuest(req: AuthedRequest, res: Response) {
     const { eventId, id } = req.params;
     const isAdmin = req.user?.role === 'admin';
 
-    // garante que pertence ao evento informado
     const existing = await prisma.guest.findFirst({ where: { id, eventId } });
     if (!existing) return res.status(404).json({ message: 'Guest not found' });
 
@@ -129,26 +134,32 @@ export async function updateGuest(req: AuthedRequest, res: Response) {
       return res.json(updated);
     }
 
-    // Admin: pode alterar todos os campos
+    // Admin: pode alterar todos os campos; somente "name" é o campo obrigatório no conceito do recurso,
+    // mas NÃO é obrigatório enviar "name" em toda edição. Se vier, validamos que não está vazio.
     const { name, birthdate, document, status } = req.body as {
       name?: string; birthdate?: string; document?: string; status?: GuestStatus;
     };
 
     const data: any = { updatedById: req.user!.id };
-    if (name !== undefined) data.name = name;
+
+    if (name !== undefined) {
+      if (!name || !name.trim()) return res.status(400).json({ message: 'Name cannot be empty' });
+      data.name = name.trim();
+    }
     if (document !== undefined) data.document = document;
+
     if (status !== undefined) {
       if (!ALLOWED_STATUS.has(status)) return res.status(400).json({ message: 'Invalid status' });
-      data.status = status; // <- tipado como GuestStatus
+      data.status = status;
     }
+
     if (birthdate !== undefined) {
-      let b: Date;
       try {
-        b = parseBirthdateOr400(birthdate)!;
+        const b = parseBirthdateOr400(birthdate);
+        data.birthdate = b; // se birthdate vier vazio, vira undefined e o Prisma ignora
       } catch {
         return res.status(400).json({ message: 'Invalid birthdate' });
       }
-      data.birthdate = b;
     }
 
     const updated = await prisma.guest.update({
@@ -172,8 +183,6 @@ export async function deleteGuest(req: AuthedRequest, res: Response) {
     if (req.user?.role !== 'admin') return res.status(403).json({ message: 'Admins only' });
 
     const { eventId, id } = req.params;
-
-    // garante que pertence ao evento informado
     const existing = await prisma.guest.findFirst({ where: { id, eventId } });
     if (!existing) return res.status(404).json({ message: 'Guest not found' });
 

@@ -63,8 +63,8 @@ model Guest {
   event      Event        @relation(fields: [eventId], references: [id])
   eventId    String
   name       String
-  birthdate  DateTime
-  document   String
+  birthdate  DateTime?
+  document   String?
   status     GuestStatus  @default(pending)
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
